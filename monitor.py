@@ -1,11 +1,24 @@
 #!/usr/bin/env python3
-"""Logs Raspberry Pi health metrics to a CSV file."""
+"""Logs Raspberry Pi health metrics to a CSV file and sends alerts."""
 import csv
+import json
 import os
 import shutil
+import urllib.request
 from datetime import datetime
 
-LOG_FILE = os.path.expanduser("~/homelab-monitor/metrics.csv")
+BASE_DIR = os.path.expanduser("~/homelab-monitor")
+LOG_FILE = os.path.join(BASE_DIR, "metrics.csv")
+STATE_FILE = os.path.join(BASE_DIR, "alert_state.json")
+TOPIC_FILE = os.path.join(BASE_DIR, "ntfy_topic.txt")
+
+# Alert when a metric goes above these limits
+THRESHOLDS = {
+    "cpu_temp_c": 60,
+    "cpu_load": 1.5,
+    "memory_used_pct": 85,
+    "disk_used_pct": 85,
+}
 
 
 def cpu_temp():
@@ -42,6 +55,50 @@ def uptime_hours():
         return round(float(f.read().split()[0]) / 3600, 2)
 
 
+def send_alert(message):
+    """Send a push notification via ntfy."""
+    try:
+        with open(TOPIC_FILE) as f:
+            topic = f.read().strip()
+    except FileNotFoundError:
+        print("No ntfy topic set, skipping alert")
+        return
+
+    request = urllib.request.Request(
+        f"https://ntfy.sh/{topic}",
+        data=message.encode(),
+        headers={"Title": "sampi alert"},
+    )
+    try:
+        urllib.request.urlopen(request, timeout=10)
+        print(f"Alert sent: {message}")
+    except Exception as e:
+        print(f"Could not send alert: {e}")
+
+
+def check_alerts(row):
+    """Alert once when a metric goes over its limit, and once when it recovers."""
+    try:
+        with open(STATE_FILE) as f:
+            state = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        state = {}
+
+    for metric, limit in THRESHOLDS.items():
+        too_high = row[metric] > limit
+        was_alerting = state.get(metric, False)
+
+        if too_high and not was_alerting:
+            send_alert(f"{metric} is {row[metric]} (limit {limit})")
+        elif not too_high and was_alerting:
+            send_alert(f"{metric} back to normal: {row[metric]}")
+
+        state[metric] = too_high
+
+    with open(STATE_FILE, "w") as f:
+        json.dump(state, f)
+
+
 def main():
     row = {
         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -60,6 +117,7 @@ def main():
         writer.writerow(row)
 
     print(row)
+    check_alerts(row)
 
 
 if __name__ == "__main__":
