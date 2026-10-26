@@ -39,6 +39,6 @@ To run it every 5 minutes, add this with `crontab -e`:
 
 ## Roadmap
 - [x] Log system metrics on a schedule
-- [ ] Web dashboard with charts
+- [x] Web dashboard with charts
 - [ ] Alerts for high temperature or low disk space
 - [ ] AI-generated plain-English health summaries
