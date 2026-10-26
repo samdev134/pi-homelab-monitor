@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>sampi monitor</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+  body { font-family: sans-serif; background: #111; color: #eee; margin: 0; padding: 16px; }
+  h1 { font-size: 1.4rem; }
+  .latest { color: #aaa; font-size: 0.9rem; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+  .card { background: #1e1e1e; border-radius: 8px; padding: 12px; }
+</style>
+</head>
+<body>
+<h1>sampi health</h1>
+<p class="latest" id="latest">Loading...</p>
+<div class="grid">
+  <div class="card"><canvas id="cpu_temp_c"></canvas></div>
+  <div class="card"><canvas id="cpu_load"></canvas></div>
+  <div class="card"><canvas id="memory_used_pct"></canvas></div>
+  <div class="card"><canvas id="disk_used_pct"></canvas></div>
+</div>
+<script>
+const charts = {
+  cpu_temp_c: "CPU temperature (°C)",
+  cpu_load: "CPU load",
+  memory_used_pct: "Memory used (%)",
+  disk_used_pct: "Disk used (%)"
+};
+
+async function load() {
+  const text = await (await fetch("metrics.csv?" + Date.now())).text();
+  const [header, ...lines] = text.trim().split(/\r?\n/);
+  const cols = header.split(",");
+  // Last 288 readings = last 24 hours at one reading every 5 minutes
+  const rows = lines.slice(-288).map(line => {
+    const values = line.split(",");
+    return Object.fromEntries(cols.map((c, i) => [c, values[i]]));
+  });
+  const labels = rows.map(r => r.timestamp.slice(11, 16));
+
+  for (const [key, title] of Object.entries(charts)) {
+    new Chart(document.getElementById(key), {
+      type: "line",
+      data: { labels, datasets: [{ label: title, data: rows.map(r => Number(r[key])), tension: 0.3, pointRadius: 0 }] },
+      options: { animation: false }
+    });
+  }
+
+  const last = rows[rows.length - 1];
+  document.getElementById("latest").textContent =
+    `Last reading ${last.timestamp} · ${last.cpu_temp_c}°C · up ${last.uptime_hours}h`;
+}
+load();
+</script>
+</body>
+</html>
