@@ -1,36 +1,41 @@
 # Pi Homelab Monitor
 
-A lightweight monitoring tool running on a repurposed Raspberry Pi 1 Model B (2012).
+A lightweight monitoring system running on a repurposed Raspberry Pi 1 Model B (2012), with a live dashboard, phone alerts and an AI-generated daily health report.
 
 ## Background
-This Pi was previously used as an information display kiosk in a workplace. I wiped it, installed Raspberry Pi OS Lite and turned it into a home server that I manage remotely over SSH. This project is the first service running on it.
+This Pi was previously used as an information display kiosk in a workplace. I wiped it, installed Raspberry Pi OS Lite and turned it into a home server that I manage remotely over SSH.
 
-## What it does
-Every 5 minutes, a cron job runs `monitor.py`, which records:
-- CPU temperature
-- CPU load (1-minute average)
-- Memory usage
-- SD card storage usage
-- Uptime
+## Features
+- **Metrics logging:** `monitor.py` runs every 5 minutes via cron and records CPU temperature, CPU load, memory use, disk use and uptime to a CSV file.
+- **Web dashboard:** `index.html` charts the last 24 hours using Chart.js, served from the Pi by a systemd service, so it starts on boot and restarts if it crashes.
+- **Phone alerts:** push notifications via [ntfy](https://ntfy.sh) when a metric crosses its threshold, and again when it recovers. A state file stops repeat alerts every 5 minutes.
+- **AI daily report:** `summary.py` runs once a day, calculates key stats (min, max, average, peak time, restarts) and sends them to the Claude API, which writes a short plain-English health report sent to my phone.
 
-Each reading is appended to `metrics.csv`. The script reads directly from Linux system files (`/proc/meminfo`, `/proc/uptime`, `/sys/class/thermal`), so it needs no extra packages. That matters on a single-core 700MHz Pi with 512MB of RAM.
-
-## Example output
-```
-timestamp,cpu_temp_c,cpu_load,memory_used_pct,disk_used_pct,uptime_hours
-2026-10-26 17:56:23,37.4,0.08,26.4,15.0,0.99
-```
+## Design decisions
+- **No extra packages:** the scripts read directly from Linux system files (`/proc/meminfo`, `/proc/uptime`, `/sys/class/thermal`) and use only Python's standard library. That keeps things light on a single-core 700MHz Pi with 512MB of RAM.
+- **Charts drawn in the browser:** the Pi only serves static files, and the viewer's browser does the rendering.
+- **Stats calculated before calling the AI:** sending summary stats instead of hundreds of raw readings makes requests smaller and cheaper, and means the model describes the numbers rather than calculating them.
+- **Secrets kept out of git:** the API key and ntfy topic live in local files listed in `.gitignore`.
 
 ## Setup
 ```
 git clone git@github.com:samdev134/pi-homelab-monitor.git ~/homelab-monitor
 cd ~/homelab-monitor
-python3 monitor.py
+echo "your-ntfy-topic" > ntfy_topic.txt
+nano claude_key.txt   # paste your Anthropic API key
 ```
-To run it every 5 minutes, add this with `crontab -e`:
+Add to `crontab -e`:
 ```
 */5 * * * * /usr/bin/python3 /home/<your-user>/homelab-monitor/monitor.py
+0 9 * * * /usr/bin/python3 /home/<your-user>/homelab-monitor/summary.py
 ```
+Install the dashboard service:
+```
+sudo cp homelab-dashboard.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now homelab-dashboard
+```
+Then open `http://<pi-hostname>.local:8080`.
 
 ## Hardware
 - Raspberry Pi 1 Model B
@@ -40,5 +45,6 @@ To run it every 5 minutes, add this with `crontab -e`:
 ## Roadmap
 - [x] Log system metrics on a schedule
 - [x] Web dashboard with charts
-- [ ] Alerts for high temperature or low disk space
-- [ ] AI-generated plain-English health summaries
+- [x] Alerts for high temperature, load, memory or disk usage
+- [x] AI-generated plain-English daily health report
+- [ ] Monitor other devices on the home network (up/down checks)
