@@ -1,0 +1,13 @@
+[Unit]
+Description=Homelab monitor web dashboard
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=samdev
+WorkingDirectory=/home/samdev/homelab-monitor
+ExecStart=/usr/bin/python3 -m http.server 8080
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
