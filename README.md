@@ -1,6 +1,7 @@
 # Pi Homelab Monitor
 
-![Dashboard](dashboard.png)
+![Dashboard](Dashboard.png)
+
 A lightweight monitoring system running on a repurposed Raspberry Pi 1 Model B (2012), with a live dashboard, phone alerts and an AI-generated daily health report.
 
 ## Background
